@@ -1,38 +1,41 @@
---HD44780 LCD Driver
+--T6963C GLCD Driver
 
-local bits = require("bit")
-local band,bor,lshift,rshift = bit.band, bit.bor, bit.lshift, bit.rshift
+math.randomseed(os.time()) --Set the random seed
 
-local socket = require("socket")
-local periphery = require('periphery')
+local bits = require("bit") --Require bitwise operations library
+local band,bor,lshift,rshift = bit.band, bit.bor, bit.lshift, bit.rshift --Make some of them available as local as a shortcut and for speed reasons.
 
-local GPIO = periphery.GPIO
+local socket = require("socket") --Require the LuaSocket library because it has a sleep function.
+local periphery = require('periphery') --Require the periphery library which provides the GPIO library.
 
-print("Using GPIO:",GPIO.version)
+local GPIO = periphery.GPIO --Make a shortcut to the GPIO module
 
+print("Using GPIO:",GPIO.version) --Print the GPIO version
+
+--Sleep function shortcut, and to make porting easier.
 local function sleep(seconds)
   socket.sleep(seconds)
 end
 
---WR RD CE C/D RST DB0 1 2 3 4 5 6 7 FS
-local pins = {2,3, 1,17,14, 27,22,15,18, 26,16,13,6, 23}
+--WR RD C/D RST DB0 1 2 3 4 5 6 7
+local pins = {4,17, 27,22, 10,9,11,5, 6,13,19,26}
 
 --Initalize the pins
 print("Initializing the pins...")
 for i=1,#pins do
-  pins[i] = GPIO(pins[i], i < 6 and "high" or "low")
+  pins[i] = GPIO(pins[i], i < 5 and "high" or "low") --Set the first pins to high, and the rest (data bus) to low.
 end
 
-local WR, RD, CE, CD, RST = unpack(pins)
-local FS = pins[14]
+local WR, RD, CD, RST = unpack(pins) --Give the first 4 pins names
 
 local DB = {} --Data Bus
-for i=1,8 do DB[i] = pins[5+i] end --Copy from pins
+for i=1,8 do DB[i] = pins[4+i] end --Copy from pins
 
-local DB_WRITE = true
+local DB_WRITE = true --Is it in write mode ? (It's initialized as write)
 
+--Set the databus pins to write mode
 local function setWrite()
-  if DB_WRITE then return end
+  if DB_WRITE then return end --It's already in write mode.
   
   for i=1,8 do
     DB[i].direction = "out"
@@ -41,8 +44,9 @@ local function setWrite()
   DB_WRITE = true
 end
 
+--Set the databus pins to read mode
 local function setRead()
-  if not DB_WRITE then return end
+  if not DB_WRITE then return end --It's already in read mode.
   
   for i=1,8 do
     DB[i].direction = "in"
@@ -51,22 +55,17 @@ local function setRead()
   DB_WRITE = false
 end
 
+--Read byte from the databus
 local function readDataBus(cd)
   
   --Ensure that the DB pins are in read mode
   setRead()
   
-  --Tell that we are reading
-  RD:write(false)
-  
-  --Tell that we are NOT writing
-  WR:write(true)
-  
   --Data read (cd = false), Status read (cd = true)
   CD:write(cd or false)
   
-  --Chip enable
-  CE:write(false)
+  --Tell that we are reading
+  RD:write(false)
   
   sleep(0.00015) --Sleep for 150 ns
   
@@ -80,14 +79,15 @@ local function readDataBus(cd)
     bitStr = bitStr..(b and "1" or "0")
   end
   
-  --Chip disable
-  CE:write(true)
+  --Release RD
+  RD:write(true)
   
   --Return the data
   return bits, states, bitStr
   
 end
 
+--Print to the console the current status of the display
 local function logStatus()
   --Read the STA bits
   local _, sta, str = readDataBus(true)
@@ -99,20 +99,14 @@ local function logStatus()
   print("Check Auto mode data write capability", sta[4])
   print("Check controller operation capability", sta[6])
   print("Error flag. Used for Screen Peek and Screen copy commands", sta[7] and "Error" or "No error")
-  print("Check the blink condition", sta[8] and "Blink ON" or "Blink OFF")
+  print("Check the blink condition", sta[8] and "Normal Display" or "Display Off")
   print("------- "..str.." ------")
 end
 
-local function checkStatus(ignoreSTA1)
+local function checkStatus()
   
   --Ensure that the DB pins are in read mode
   setRead()
-  
-  --Tell that we are reading
-  RD:write(false)
-  
-  --Tell that we are NOT writing
-  WR:write(true)
   
   --Data read (cd = false), Status read (cd = true)
   CD:write(true)
@@ -121,40 +115,30 @@ local function checkStatus(ignoreSTA1)
   while true do
     sleep(0.00015)
     
-    --Chip enable
-    CE:write(false)
+    --Read low
+    RD:write(false)
     
     sleep(0.00015)
     
     local STA0 = DB[1]:read()
     local STA1 = DB[2]:read()
     
-    --Chip disable
-    CE:write(true)
+    --Read high
+    RD:write(true)
     
-    if STA0 and (STA1 or ignoreSTA1) then
-      print("* Status ready")
+    if STA0 and STA1 then
       break
     end
-    
-    print("Status fail",STA0,STA1)
-    
-    sleep(0.5)
   end
 end
 
-local function writeDataBus(bits,cd,igSTA1)
+local function writeDataBus(bits,cd)
   
-  checkStatus(igSTA1)
+  --Check the current status
+  checkStatus()
   
   --Ensure that the DB pins are in write mode
   setWrite()
-  
-  --Tell that we are NOT reading
-  RD:write(true)
-  
-  --Tell that we are writing
-  WR:write(false)
   
   --Data write (cd = false), Command write (cd = true)
   CD:write(cd or false)
@@ -165,20 +149,19 @@ local function writeDataBus(bits,cd,igSTA1)
     bits = rshift(bits,1) --Shift right
   end
   
-  --Chip enable
-  CE:write(false)
+  --Write low
+  WR:write(false)
   
-  sleep(0.001)
+  sleep(0.0001)
   
-  --Chip disable
-  CE:write(true)
-  
-  sleep(0.002)
+  --Write high
+  WR:write(true)
   
   --Clear Data bus
   for i=1,8 do DB[i]:write(false) end
 end
 
+--Reset the display
 local function resetDisplay()
   RST:write(false)
   
@@ -190,54 +173,60 @@ local function resetDisplay()
   
   print("Waiting for the screen to initialize")
   
-  checkStatus(true)
+  checkStatus()
 end
 
-local function sendCommand(binary, arg1, arg2, igSTA1)
-  igSTA1 = true
-  if arg1 then writeDataBus(arg1, true, igSTA1) end
-  if arg2 then writeDataBus(arg2, true, igSTA1) end
-  writeDataBus(tonumber(binary, 2), true, igSTA1)
+local function sendCommand(binary, arg1, arg2)
+  if arg1 then writeDataBus(arg1) end
+  if arg2 then writeDataBus(arg2) end
+  writeDataBus(tonumber(binary, 2), true)
 end
 
 print("--RESET DISPLAY")
 resetDisplay()
+logStatus()
 
-print("--Reset auto")
-sendCommand(10110010)
+print("--Text home address")
+sendCommand(01000000,0x00,0x08) --Text home at 0x0800
 
-print("--Set graphic home address")
-sendCommand(01000010,0,0)
+print("--Text area")
+sendCommand(01000001,16,0x00) --16 Column, (FS = 0) 128x128 Display
 
-print("--Set text home address")
-sendCommand(01000000,0x0A,0)
+print("--Graphics home address")
+sendCommand(01000010,0x00,0x00) --Graphics home at 0x0000
 
-print("--Set graphic area")
-sendCommand(01000011,32)
+print("--Graphics area")
+sendCommand(01000011,16,0x00) --Line length in pixels, 128/8 = 16 (1bit display) (128x128 display)
 
-print("--Set text area")
-sendCommand(01000001,32)
+print("--Mode set")
+sendCommand(10000000) --OR Mode, internal CGROM
 
-print("--Set offset")
-sendCommand(00100010,tonumber(11111,2),0) --At the memory end
+print("--Cursor pattern select")
+sendCommand(10100111) --8-line cursor
 
-print("--Set merge mode")
-sendCommand(10000000) --OR Mode
+print("--Address pointer set")
+sendCommand(00100100,0x00,0x00) --Set at the start of the graphics area
 
-print("--Set display mode")
-sendCommand(10011111)
+print("--Set cursor pointer")
+sendCommand(00100001,0x00,0x00)
 
-print("--Send test bytes")
-sendCommand(11000000,255)
-sendCommand(11000000,255)
-sendCommand(11000000,255)
-sendCommand(11000000,255)
+print("--Display mode set")
+sendCommand(10011111) --Text on, graphics on, cursor on, blink on
 
-print("--Status check")
-checkStatus(true)
+print("--Display clear")
+for i=0,0x07FF+256 do
+  sendCommand(11000000,0)
+end
 
-print("\n---Press enter to status check")
-io.read()
+print("--Address pointer set")
+sendCommand(00100100,0x00,0x08) --Set at the start of the text area
+
+print("--Show character map")
+for i=0,0x7F do
+  local byte = i%0x80
+  sendCommand(11000000,byte)
+end
+
 logStatus()
 
 print("\n---Press enter to stop")

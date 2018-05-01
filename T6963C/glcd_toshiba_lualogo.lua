@@ -1,4 +1,4 @@
---HD44780 LCD Driver
+--T6963C GLCD Driver
 
 math.randomseed(os.time()) --Set the random seed
 
@@ -18,7 +18,7 @@ local function sleep(seconds)
 end
 
 print("Processing image")
-local imagefile = io.open("/home/pi/Desktop/Soubhi.txt","r")
+local imagefile = io.open("/home/pi/Desktop/Github/LuaJIT-RPi/T6963C/LuaLogo.txt","r")
 local imagedata = imagefile:read("*a")
 imagefile:close()
 imagedata = imagedata:gsub("\n",""):gsub("\r","") --Remove new lines
@@ -251,11 +251,14 @@ for i=1,#imagebytes do
   sendCommand(11000000,imagebytes[i])
 end
 
+print("--Address pointer set")
+sendCommand(00100100,0xF0,0x08) --Set at the last line of the text area
+
 print("--Sending text")
-sendText(" I'm sorry, dad ")
+sendText("  Lua Rocks !   ")
 
 print("--Set cursor pos")
-sendCommand(00100001,0x0F,0x00)
+sendCommand(00100001,0x0D,0x0F)
 
 logStatus()
 
