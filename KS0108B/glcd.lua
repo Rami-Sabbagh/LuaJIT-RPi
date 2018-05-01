@@ -1,4 +1,4 @@
---HD44780 LCD Driver
+--KS018B GLCD Driver
 
 local slowMotion = false--0.01
 

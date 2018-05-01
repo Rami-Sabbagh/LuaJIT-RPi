@@ -1,4 +1,4 @@
---LED Matrix RAMI
+--8x5 LED Matrix
 
 local json = dofile("/home/pi/Desktop/Matrix/json.lua")
 local socket = require("socket")
