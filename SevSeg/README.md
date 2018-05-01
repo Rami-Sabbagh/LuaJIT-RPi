@@ -1,0 +1,1 @@
+This directory contains lua scripts for driving a 4 Digits, Seven-segments display.
