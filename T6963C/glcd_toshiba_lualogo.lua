@@ -207,6 +207,8 @@ local function sendText(text)
   end
 end
 
+local startTime = os.clock()
+
 print("--RESET DISPLAY")
 resetDisplay()
 logStatus()
@@ -239,17 +241,21 @@ print("--Display mode set")
 sendCommand(10011111) --Text on, graphics on, cursor on, blink on
 
 print("--Display clear")
+sendCommand(10110000) --Auto write
 for i=0,0x07FF+256 do
-  sendCommand(11000000,0)
+  writeDataBus(0)
 end
+sendCommand(10110010) --Auto reset
 
 print("--Address pointer set")
 sendCommand(00100100,0x00,0x00) --Set at the start of the graphics area
 
 print("--Sending image")
+sendCommand(10110000) --Auto write
 for i=1,#imagebytes do
-  sendCommand(11000000,imagebytes[i])
+  writeDataBus(imagebytes[i])
 end
+sendCommand(10110010) --Auto reset
 
 print("--Address pointer set")
 sendCommand(00100100,0xF0,0x08) --Set at the last line of the text area
@@ -261,6 +267,10 @@ print("--Set cursor pos")
 sendCommand(00100001,0x0D,0x0F)
 
 logStatus()
+
+local endTime = os.clock()
+
+print("Scripted finish in "..(endTime-startTime).." seconds")
 
 print("\n---Press enter to stop")
 io.read()
