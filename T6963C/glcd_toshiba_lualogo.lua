@@ -5,17 +5,11 @@ math.randomseed(os.time()) --Set the random seed
 local bits = require("bit") --Require bitwise operations library
 local band,bor,lshift,rshift = bit.band, bit.bor, bit.lshift, bit.rshift --Make some of them available as local as a shortcut and for speed reasons.
 
-local socket = require("socket") --Require the LuaSocket library because it has a sleep function.
 local periphery = require('periphery') --Require the periphery library which provides the GPIO library.
 
 local GPIO = periphery.GPIO --Make a shortcut to the GPIO module
 
 print("Using GPIO:",GPIO.version) --Print the GPIO version
-
---Sleep function shortcut, and to make porting easier.
-local function sleep(seconds)
-  socket.sleep(seconds)
-end
 
 print("Processing image")
 local imagefile = io.open("/home/pi/Desktop/Github/LuaJIT-RPi/T6963C/LuaLogo.txt","r")
@@ -85,8 +79,6 @@ local function readDataBus(cd)
   --Tell that we are reading
   RD:write(false)
   
-  sleep(0.00015) --Sleep for 150 ns
-  
   --Read the data bus
   local states, bits, bitStr = {}, 0, ""
   for i=8,1,-1 do
@@ -131,12 +123,8 @@ local function checkStatus()
   
   --Loop until the status flags are on
   while true do
-    sleep(0.00015)
-    
     --Read low
     RD:write(false)
-    
-    sleep(0.00015)
     
     local STA0 = DB[1]:read()
     local STA1 = DB[2]:read()
@@ -170,8 +158,6 @@ local function writeDataBus(bits,cd)
   --Write low
   WR:write(false)
   
-  sleep(0.0001)
-  
   --Write high
   WR:write(true)
   
@@ -183,11 +169,7 @@ end
 local function resetDisplay()
   RST:write(false)
   
-  sleep(0.1)
-  
   RST:write(true)
-  
-  sleep(0.1)
   
   print("Waiting for the screen to initialize")
   
